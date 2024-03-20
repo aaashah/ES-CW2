@@ -10,14 +10,13 @@
 struct
 {
 	std::bitset<32> inputs;
-	std::bitset<32> senderInputs = 0xffffffff;
 	SemaphoreHandle_t mutex; // LAB 2 task 1
 	int knob3Rotation;		 // LAB 2 task 2
 	int knob2Rotation;		 // octave number
 	int volume;
 	uint8_t RX_Message[8] = {0};
 	uint32_t adjstepSizes[12] = {0};
-	bool receiver = false;
+	bool receiver = true;
 } sysState;
 QueueHandle_t msgInQ;
 
@@ -94,7 +93,7 @@ void sampleISR()
 	// Iterate through all possible notes
 	for (int i = 0; i < 12; ++i)
 	{
-		if ((sysState.senderInputs[i] && sysState.inputs[i]) == 0) // Check if the note is active
+		if (sysState.inputs[i] == 0) // Check if the note is active
 		{
 			// Calculate the step size for the note based on its frequency
 			uint32_t stepSize = sysState.adjstepSizes[i];
@@ -256,7 +255,7 @@ uint32_t getStepSizeFromInput(std::bitset<32> inputs)
 	{
 		// Check if the corresponding bit in inputs is 0
 		if ((inputs.to_ulong() & (1 << i)) == 0)
-		{
+		{	
 			// Return the step size corresponding to the pressed key
 			return stepSizes[i];
 		}
@@ -277,26 +276,21 @@ void decodeTask(void *pvParameters)
 			sysState.volume=local[4];
 		}
 
-		if (local[0] == 'R')
-		{
 
-			sysState.senderInputs[local[2]] = 1;
-		}
 		if (local[0] == 'P')
 		{
-			sysState.senderInputs[local[2]] = 0;
-			// sysState.inputs[local[1]]=0;
+			sysState.inputs[local[1]]=0;
 			// Serial.println("Received");
 			for (int j = 0; j < 12; ++j)
 			{
-				if (local[1] >= 4)
+				if (sysState.knob2Rotation >= 4)
 				{
 					// Serial.println("oct > 4");
-					sysState.adjstepSizes[j] = stepSizes[j] << (local[1] - 4);
+					sysState.adjstepSizes[j] = stepSizes[j] << (sysState.knob2Rotation - 4);
 				}
 				else if (sysState.knob2Rotation < 4)
 				{
-					sysState.adjstepSizes[j] = stepSizes[j] >> (4 - local[1]);
+					sysState.adjstepSizes[j] = stepSizes[j] >> (4 - sysState.knob2Rotation);
 				}
 			}
 		}
@@ -381,12 +375,10 @@ void scanKeysTask(void *pvParameters)
 							if (current2A == 1 && current2B == 0)
 							{
 								sysState.knob2Rotation = (sysState.knob2Rotation + 1) % 9;
-								Serial.println("Clockwise");
 							}
 							else if (current2A == 0 && current2B == 1)
 							{
 								sysState.knob2Rotation = (sysState.knob2Rotation + 8) % 9;
-								Serial.println("Counter-clockwise");
 							}
 						}
 					}
@@ -395,7 +387,7 @@ void scanKeysTask(void *pvParameters)
 					prev2B = current2B;
 				}
 
-				
+								// Knob 3 decode (LAB 2 task 2)
 				if (rowIdx == 5)
 				{
 					if (!rowInputs[1]) {
@@ -410,10 +402,7 @@ void scanKeysTask(void *pvParameters)
 				}
 				if (sysState.receiver)
 				{
-					uint8_t TX_Message[8] = {0};
 					sysState.volume=sysState.knob3Rotation;
-					TX_Message[4] = sysState.knob3Rotation;
-					CAN_TX(0x123, TX_Message);
 					for (int j = 0; j < 12; ++j)
 					{
 						if (sysState.knob2Rotation > 4)
@@ -430,14 +419,15 @@ void scanKeysTask(void *pvParameters)
 				{
 					uint8_t TX_Message[8] = {0};
 					// Compare current inputs with previous inputs
-					for (int i = 0; i < 12; ++i)
+					for (int i = 0; i < 32; ++i)
 					{
 						if (sysState.inputs[i] != prevInputs[i])
 						{
 							// Key state changed, update TX_Message
 							TX_Message[0] = sysState.inputs[i] ? 'R' : 'P'; // 'P' for pressed, 'R' for released
 							TX_Message[1] = sysState.knob2Rotation;			// Octave number
-							TX_Message[2] = i ;							// Note number
+							TX_Message[2] = i % 12;							// Note number
+							TX_Message[4] = sysState.knob3Rotation;
 							CAN_TX(0x123, TX_Message);
 							break; // Exit loop after handling the first changed key
 						}
@@ -510,7 +500,7 @@ void displayUpdateTask(void *pvParameters)
 
 			u8g2.setCursor(2, 30);
 			u8g2.print("Volume: ");
-			u8g2.print(sysState.volume);
+			u8g2.print(sysState.knob3Rotation);
 
 			// u8g2.setCursor(66,30);
 			// u8g2.print((char) TX_Message[0]);
