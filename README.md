@@ -3,8 +3,9 @@
 
 1. [Introduction](#introduction)
 2. [Tasks](#tasks)
-3. [Performance](#performance)
-4. [Analysis](#analysis)
+3. [Advanced Tasks](#advancedtasks)
+4. [Performance](#performance)
+5. [Analysis](#analysis)
 
 # Introduction
 This report provides detailed analysis of the embedded system, which is designed to manage real-time audio processing and user interaction. It outlines task implementation, performance evaluation, and critically analyses the effectiveness of the system design. The system aims to achieve responsive and deterministic behaviour using techniques such as scheduling, interrupt handling, and data synchronisation.
@@ -37,10 +38,24 @@ Measured maximum execution time -
 This transmits CAN messages containing state information. Similar to other thread-based tasks, it operates within the FreeRTOS scheduler, periodically sending updates over the CAN bus.             
 Method- Thread     
 Theoretical minimum initiation -      
-Measured maximum execution time -     
+Measured maximum execution time -   
+
+# Advanced Tasks
+East and west detection for extra piano moudles have been implemented here. This allows the piano to determine if it is alone or conjoined. This is important as the initial value for the Can bus initialisation is false meaning a piano module connected to nothing will stall and crash. Before sending a message into the bus it first checks to see if an extra module is detected or not. If there is another it goes through and sends the message as it will recieve an acknowledgement, however if it is alone, it will not and thus does not send the message.
+
+Also in the scan keys task is a method to determine which module acts as the receiver and which modules act as the senders. By clicking down on the third knob, the piano is set to a reciever and the variable ‘S’ is sent down the bus to every other module. As mentioned before if a module receives an S in the decode task its can initialisation is set to False resulting in it becoming a sender. This allows for it to send the notes being played to the receiver module and not reading and playing its own.
+
+## SampleISR()
+In SampleISR a method of polyphony has been implemented. By chasing the phase accumulator variable to a list, it can accumulate each individual note separately allowing for all 12 notes to be played simultaneously. For each index in the sysState.inputs variable it checks for a 0 and the corresponding value of the adjStepSizes list is accumulated in the corresponding index in the phase accumulator list. It then adjusts each value by the correct octave determined by the 2nd knob rotation. It generates a waveform through in Vout. Vout is then added to a variable mixed output, for each iteration of the for loop each waveform is added to mixed output generating a full waveform of every note which is being pressed down, finally it scales the waveform down depending on how many notes are being played. This is done by adding an active count which is increased for each active note being played, the final output is then divided by this to scale the volume down appropriately.
+
+
+
+
+
 
 # Performance
 ## Total CPU Utilisation
+The total CPU utilisation of the system plays a crucial role in determining its overall performance and responsiveness. It is influenced by the execution patterns of individual tasks, their priorities, and the efficiency of task scheduling mechanisms. By profiling the execution times of each task and analysing their respective CPU utilization rates, it is possible to gauge the system's overall workload distribution and identify potential bottlenecks. Optimizing task priorities, minimizing unnecessary CPU overhead, and adopting efficient scheduling strategies are essential measures to ensure optimal CPU utilisation. Furthermore, real-time operating systems like FreeRTOS offer features such as task prioritisation, preemption, and time slicing, enabling fine-grained control over CPU allocation and maximising system responsiveness. By monitoring and optimizing CPU utilisation, the system can achieve efficient resource utilisation, meet real-time deadlines, and deliver consistent performance across varying workloads.
 
 ## Shared Data Structures and Synchronisation Methods
 The system uses shared data structures to facilitate the communication and coordination between tasks.      
