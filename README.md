@@ -16,25 +16,25 @@ Theoretical minimum initiation -
 Measured maximum execution time - 
 
 ## displayUpdateTask()
-This task updates the OLED display with the latest state information of the system including octaves, volume, keys and input hex.     
+This task updates the OLED display with the latest state information of the system including octaves, volume, keys and input hex. It is a thread based task and operates independently within the FreeRTOS schedular. Once executed,  it retrieves relevant system parameters and formats them for display. This task plays a vital role in providing user feedback and ensuring a seamless interaction experience.           
 Method- Thread 
 Theoretical minimum initiation -     
 Measured maximum execution time -  
 
 ## CAN_RX_ISR()
-This handles the interrupt service routine for receiving CAN messages.    
+This handles the interrupt service routine (IRS) for receiving CAN messages. As an interrupt-based method, it operates asynchronously in response to external events. When a CAN message is received, the ISR processes the message and queues it for further decoding by the system.             
 Method- Interrupt     
 Theoretical minimum initiation -     
 Measured maximum execution time -    
 
 ## decodeTask()
-This decodes the received CAN messages and updates system variables accordingly.    
+This decodes the received CAN messages and updates system variables accordingly. Operating as a thread within the FreeRTOS environment, it continuously monitors the message queue for incoming data. Upon receiving a message, it interprets its content and adjusts system parameters as necessary.          
 Method- Thread     
 Theoretical minimum initiation -     
 Measured maximum execution time -    
 
 ## CAN_TX_Task()
-This transmits CAN messages containing state information.     
+This transmits CAN messages containing state information. Similar to other thread-based tasks, it operates within the FreeRTOS scheduler, periodically sending updates over the CAN bus.             
 Method- Thread     
 Theoretical minimum initiation -      
 Measured maximum execution time -     
@@ -44,7 +44,7 @@ Measured maximum execution time -
 
 ## Shared Data Structures and Synchronisation Methods
 The system uses shared data structures to facilitate the communication and coordination between tasks.      
-The ‘sysState’ structure is used to share system state information. ‘knobRotation’ is a shared variable tracking knob rotation.       Synchronisation is achieved using mutexes to ensure safe access to shared resources.    
+The ‘sysState’ structure is used to share system state information. ‘knobRotation’ is a shared variable tracking knob rotation.       Synchronisation is achieved using mutexes to ensure safe access to shared resources. This approach minimises the risk of data corruption and race conditions, enhancing system reliability and stability.   
 
 # Analysis
 ## Critical Instance Analysis
@@ -58,6 +58,6 @@ One concern is resource contention, particularly in tasks such as 'scanKeysTask(
 
 Moreover, priority inversion poses a risk to system performance, whereby lower-priority tasks holding essential resources may inadvertently block higher-priority tasks. For instance, if a low-priority task acquires a mutex required by a high-priority task, the high-priority task may be delayed, resulting in priority inversion. Mitigating priority inversion requires the adoption of priority inheritance protocols, ensuring that tasks holding critical resources temporarily inherit the priority of the highest-priority task waiting for access.
 
-Another concern is task preemption, introducing non-deterministic behavior and potential delays in critical task execution. Preemptive scheduling policies tailored to the system's real-time requirements can help mitigate the impact of task preemption on blocking dependencies. By prioritising time-sensitive tasks and minimising preemption-related delays, preemptive scheduling enhances system responsiveness and determinism which mitigaates the risk of blocking-induced performance degradation.
+Another concern is task preemption, introducing non-deterministic behavior and potential delays in critical task execution. Preemptive scheduling policies tailored to the system's real-time requirements can help mitigate the impact of task preemption on blocking dependencies. By prioritising time-sensitive tasks and minimising preemption-related delays, preemptive scheduling enhances system responsiveness and determinism which mitigates the risk of blocking-induced performance degradation.
 
 In response to these challenges, it is imperative to optimise task priorities, employ real-time scheduling policies, profile and analyse blocking scenarios, and continuously monitor and tune system parameters. By identifying and addressing inter-task blocking dependencies proactively, the system can achieve enhanced responsiveness, reliability, and real-time performance, ensuring the seamless execution of critical tasks within the embedded environment.
