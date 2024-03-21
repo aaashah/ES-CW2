@@ -26,7 +26,7 @@ Measured maximum execution time - 17 Microseconds
 This handles the interrupt service routine (IRS) for receiving CAN messages. As an interrupt-based method, it operates asynchronously in response to external events. When a CAN message is received, the ISR processes the message and queues it for further decoding by the system.             
 Method- Interrupt     
 Theoretical minimum initiation - 6.94 Microseconds   
-Measured maximum execution time -    
+Measured maximum execution time - 43.2 Microseconds   
 
 ## decodeTask()
 This decodes the received CAN messages and updates system variables accordingly. Operating as a thread within the FreeRTOS environment, it continuously monitors the message queue for incoming data. Upon receiving a message, it interprets its content and adjusts system parameters as necessary.          
@@ -35,11 +35,6 @@ Theoretical minimum initiation - 13.89 Microseconds
 Measured maximum execution time - 11.7 Microseconds
    
 
-## CAN_TX_Task()
-This transmits CAN messages containing state information. Similar to other thread-based tasks, it operates within the FreeRTOS scheduler, periodically sending updates over the CAN bus.             
-Method- Thread     
-Theoretical minimum initiation -      
-Measured maximum execution time -   
 
 # Advanced Tasks
 East and west detection for extra piano moudles have been implemented here. This allows the piano to determine if it is alone or conjoined. This is important as the initial value for the Can bus initialisation is false meaning a piano module connected to nothing will stall and crash. Before sending a message into the bus it first checks to see if an extra module is detected or not. If there is another it goes through and sends the message as it will recieve an acknowledgement, however if it is alone, it will not and thus does not send the message.
