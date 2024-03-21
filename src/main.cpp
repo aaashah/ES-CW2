@@ -7,18 +7,25 @@
 #include <STM32FreeRTOS.h>
 #include <ES_CAN.h>
 
+#define DISABLE_THREADS
+//#define TEST_SCANKEYS
+//#define TEST_DISPLAY
+//#define TEST_DECODE
+
 struct
 {
 	std::bitset<32> inputs;
+	std::bitset<32> senderInputs = 0xffffffff;
 	SemaphoreHandle_t mutex; // LAB 2 task 1
 	int knob3Rotation;		 // LAB 2 task 2
 	int knob2Rotation;		 // octave number
 	int volume;
 	uint8_t RX_Message[8] = {0};
 	uint32_t adjstepSizes[12] = {0};
-	bool receiver = true;
-	bool west = false;
+	bool receiver = false;
 	bool east = false;
+	bool west = false;
+	bool eow = false;
 } sysState;
 QueueHandle_t msgInQ;
 
@@ -95,7 +102,7 @@ void sampleISR()
 	// Iterate through all possible notes
 	for (int i = 0; i < 12; ++i)
 	{
-		if (sysState.inputs[i] == 0) // Check if the note is active
+		if ((sysState.senderInputs[i] && sysState.inputs[i]) == 0) // Check if the note is active
 		{
 			// Calculate the step size for the note based on its frequency
 			uint32_t stepSize = sysState.adjstepSizes[i];
@@ -107,7 +114,7 @@ void sampleISR()
 			int32_t Vout = (phaseAcc[i] >> 24) - 128;
 
 			// Adjust the volume for the note
-			Vout = Vout >> (8 - 8);
+			Vout = Vout >> (8 - sysState.volume);
 
 			// Accumulate the output voltage for the mixed output
 			mixedOutput += Vout;
@@ -140,11 +147,7 @@ void sampleISR()
 
 std::bitset<4> readCols()
 {
-	// Set each row select address (RA0, RA1, RA2) low
-	// digitalWrite(RA2_PIN, LOW);
-	// digitalWrite(RA1_PIN, LOW);
-	// digitalWrite(RA0_PIN, LOW);
-
+	// Read the inputs from the four columns (C0, C1, C2, C3)
 	std::bitset<4> result;
 	result[0] = digitalRead(C0_PIN);
 	result[1] = digitalRead(C1_PIN);
@@ -153,18 +156,6 @@ std::bitset<4> readCols()
 
 	return result;
 
-	// Set row select enable (REN) high
-	// digitalWrite(REN_PIN, HIGH);
-
-	// // Read the inputs from the four columns (C0, C1, C2, C3)
-	// std::bitset<4> result;
-	// result[0] = digitalRead(C0_PIN);
-	// result[1] = digitalRead(C1_PIN);
-	// result[2] = digitalRead(C2_PIN);
-	// result[3] = digitalRead(C3_PIN);
-
-	// // Reset row select enable (REN) to low for the next read
-	// digitalWrite(REN_PIN, LOW);
 }
 
 // Function to select a given row of the switch matrix
@@ -257,7 +248,7 @@ uint32_t getStepSizeFromInput(std::bitset<32> inputs)
 	{
 		// Check if the corresponding bit in inputs is 0
 		if ((inputs.to_ulong() & (1 << i)) == 0)
-		{	
+		{
 			// Return the step size corresponding to the pressed key
 			return stepSizes[i];
 		}
@@ -270,7 +261,10 @@ uint32_t getStepSizeFromInput(std::bitset<32> inputs)
 void decodeTask(void *pvParameters)
 {
 	uint8_t local[8] = {0};
-	while (1)
+	
+	#ifndef DISABLE_THREADS
+	while(1)
+	#endif
 	{
 		xQueueReceive(msgInQ, local, portMAX_DELAY);
 		if (local[5] == 'S'){
@@ -278,24 +272,29 @@ void decodeTask(void *pvParameters)
 			sysState.volume=local[4];
 		}
 
+		if (local[0] == 'R')
+		{
 
+			sysState.senderInputs[local[2]] = 1;
+		}
 		if (local[0] == 'P')
 		{
-			sysState.inputs[local[1]]=0;
-			// Serial.println("Received");
+			sysState.senderInputs[local[2]] = 0;
+
 			for (int j = 0; j < 12; ++j)
 			{
-				if (sysState.knob2Rotation >= 4)
+				if (local[1] >= 4)
 				{
 					// Serial.println("oct > 4");
-					sysState.adjstepSizes[j] = stepSizes[j] << (sysState.knob2Rotation - 4);
+					sysState.adjstepSizes[j] = stepSizes[j] << (local[1] - 4);
 				}
 				else if (sysState.knob2Rotation < 4)
 				{
-					sysState.adjstepSizes[j] = stepSizes[j] >> (4 - sysState.knob2Rotation);
+					sysState.adjstepSizes[j] = stepSizes[j] >> (4 - local[1]);
 				}
 			}
 		}
+		
 		xSemaphoreTake(sysState.mutex, portMAX_DELAY);
 		memcpy(sysState.RX_Message, local, sizeof(local));
 		xSemaphoreGive(sysState.mutex);
@@ -316,7 +315,9 @@ void scanKeysTask(void *pvParameters)
 	int prev2A = 0;
 	int prev2B = 0;
 
-	while (1)
+	#ifndef DISABLE_THREADS
+	while(1)
+	#endif
 	{
 		// Open mutex
 		if (xSemaphoreTake(sysState.mutex, portMAX_DELAY) == pdTRUE)
@@ -353,14 +354,8 @@ void scanKeysTask(void *pvParameters)
 
 				if (sysState.west || sysState.east)
 				{
-					sysState.receiver=false;
+					sysState.eow=true;
 				}
-
-				//Serial.println("west: ");
-				//Serial.println(sysState.west);
-				//Serial.println("east: ");
-				//Serial.println(sysState.east);
-
 
 				// Knob 3 decode (LAB 2 task 2)
 				if (rowIdx == 3)
@@ -402,10 +397,12 @@ void scanKeysTask(void *pvParameters)
 							if (current2A == 1 && current2B == 0)
 							{
 								sysState.knob2Rotation = (sysState.knob2Rotation + 1) % 9;
+								Serial.println("Clockwise");
 							}
 							else if (current2A == 0 && current2B == 1)
 							{
 								sysState.knob2Rotation = (sysState.knob2Rotation + 8) % 9;
+								Serial.println("Counter-clockwise");
 							}
 						}
 					}
@@ -414,22 +411,30 @@ void scanKeysTask(void *pvParameters)
 					prev2B = current2B;
 				}
 
-								// Knob 3 decode (LAB 2 task 2)
+				
 				if (rowIdx == 5)
 				{
 					if (!rowInputs[1]) {
 						uint8_t TX_Message[8] = {0};
 						// HERE ADD CAN MESSAGE TO TURN ALL OTHER BOARDS INTO SENDERS (RECEIVER = FALSE)
 						TX_Message[5] = 'S' ;
-						CAN_TX(0x123, TX_Message);
-
+						if (sysState.eow){
+							CAN_TX(0x123, TX_Message);
+						}
+						
 						// IN DECODE IF 'S' RECEIVER = FALSE
 						sysState.receiver = true;
 					}
 				}
 				if (sysState.receiver)
 				{
+					uint8_t TX_Message[8] = {0};
 					sysState.volume=sysState.knob3Rotation;
+					TX_Message[4] = sysState.knob3Rotation;
+					
+					if (sysState.eow){
+						CAN_TX(0x123, TX_Message);
+					}
 					for (int j = 0; j < 12; ++j)
 					{
 						if (sysState.knob2Rotation > 4)
@@ -444,36 +449,24 @@ void scanKeysTask(void *pvParameters)
 				}
 				else
 				{
+					//Serial.println("test5");
 					uint8_t TX_Message[8] = {0};
 					// Compare current inputs with previous inputs
-					for (int i = 0; i < 32; ++i)
+					for (int i = 0; i < 12; ++i)
 					{
-						if (sysState.inputs[i] != prevInputs[i])
-						{
+							//Serial.println("test6");
 							// Key state changed, update TX_Message
 							TX_Message[0] = sysState.inputs[i] ? 'R' : 'P'; // 'P' for pressed, 'R' for released
 							TX_Message[1] = sysState.knob2Rotation;			// Octave number
-							TX_Message[2] = i % 12;							// Note number
-							TX_Message[4] = sysState.knob3Rotation;
-							CAN_TX(0x123, TX_Message);
+							TX_Message[2] = i ;							// Note number
+							if (sysState.eow){
+								CAN_TX(0x123, TX_Message);
+							}
 							break; // Exit loop after handling the first changed key
-						}
+						
 					}
 				}
 			}
-
-			// uint8_t TX_Message[8] = {0};
-			// // Compare current inputs with previous inputs
-			// for (int i = 0; i < 32; ++i) {
-			//     if (sysState.inputs[i] != prevInputs[i]) {
-			//         // Key state changed, update TX_Message
-			//         TX_Message[0] = sysState.inputs[i] ? 'R' : 'P'; // 'P' for pressed, 'R' for released
-			//         TX_Message[1] = sysState.knob2Rotation; // Octave number
-			//         TX_Message[2] = i % 12; // Note number
-			// 		CAN_TX(0x123, TX_Message);
-			//         break; // Exit loop after handling the first changed key
-			//     }
-			// }
 
 			// Store current inputs for next iteration
 			prevInputs = sysState.inputs;
@@ -483,30 +476,22 @@ void scanKeysTask(void *pvParameters)
 		}
 		localCurrentStepSize = getStepSizeFromInput(sysState.inputs);
 		__atomic_store_n(&currentStepSize, localCurrentStepSize, __ATOMIC_RELAXED);
-
-		// Delay until the next execution time
-		vTaskDelayUntil(&xLastWakeTime, xFrequency);
 	}
 }
 
 void displayUpdateTask(void *pvParameters)
 {
+	#ifndef DISABLE_THREADS
 	const TickType_t xFrequency = 100 / portTICK_PERIOD_MS;
 	TickType_t xLastWakeTime = xTaskGetTickCount();
 
-	while (1)
+	while(1)
+	#endif
 	{
+
 		// Update display
 		if (xSemaphoreTake(sysState.mutex, portMAX_DELAY) == pdTRUE)
 		{
-			// Display TX_Message in the serial monitor
-			// Serial.print("TX_Message: ");
-			// for (int i = 0; i < 8; ++i) {
-			//    Serial.print(TX_Message[i]);
-			//    Serial.print(" ");
-			//}
-			// Serial.println();
-
 			// Update display content
 			u8g2.clearBuffer();
 			u8g2.setFont(u8g2_font_ncenB08_tr);
@@ -518,21 +503,13 @@ void displayUpdateTask(void *pvParameters)
 			u8g2.print("Oct: ");
 			u8g2.print(sysState.knob2Rotation);
 
-			u8g2.setCursor(80, 20);
-			u8g2.print("pls :)");
-
 			u8g2.setCursor(2, 20);
 			u8g2.print("Keys: ");
 			u8g2.print(getKeysFromInput(sysState.inputs));
 
 			u8g2.setCursor(2, 30);
 			u8g2.print("Volume: ");
-			u8g2.print(sysState.knob3Rotation);
-
-			// u8g2.setCursor(66,30);
-			// u8g2.print((char) TX_Message[0]);
-			// u8g2.print(TX_Message[1]);
-			// u8g2.print(TX_Message[2]);
+			u8g2.print(sysState.volume);
 
 			// Poll for received messages
 
@@ -550,15 +527,20 @@ void displayUpdateTask(void *pvParameters)
 
 			xSemaphoreGive(sysState.mutex);
 		}
-
+		#ifndef DISABLE_THREADS
 		vTaskDelayUntil(&xLastWakeTime, xFrequency);
+		#endif
 	}
 }
 
 void setup()
 {
 	// put your setup code here, to run once:
+	#ifndef TEST_DECODE
 	CAN_Init(sysState.receiver);
+	#else 
+	CAN_Init(true);
+	#endif
 	setCANFilter(0x123, 0x7ff);
 	CAN_RegisterRX_ISR(CAN_RX_ISR);
 	CAN_Start();
@@ -568,10 +550,11 @@ void setup()
 	if (dataMutex == NULL)
 	{
 		// Failed to create mutex
-		while (1)
-			;
+		while (1);
 	}
 	// rtos scheduler setup
+	
+	#ifndef DISABLE_THREADS
 	TaskHandle_t scanKeysHandle = NULL;
 	xTaskCreate(
 		scanKeysTask,	  /* Function that implements the task */
@@ -597,7 +580,7 @@ void setup()
 		NULL,
 		1,
 		&scanKeysHandle);
-
+	#endif 
 	// interrupt timer setup
 	TIM_TypeDef *Instance = TIM1;
 	HardwareTimer *sampleTimer = new HardwareTimer(Instance);
@@ -639,46 +622,49 @@ void setup()
 	sysState.mutex = xSemaphoreCreateMutex();
 
 	// rtos scheduler start
+	#ifndef DISABLE_THREADS
 	vTaskStartScheduler();
+	#endif
 }
 
 void loop()
 {
+	#ifdef TEST_SCANKEYS
+		uint32_t startTime = micros();
+		for (int iter = 0; iter < 32; iter++) {
+			scanKeysTask(NULL);
+		}
+		Serial.print("32 iterations of Scan Keys takes: ");
+		Serial.print(micros()-startTime);
+		Serial.println(" microseconds");
+		while(1);
+	#endif
 
-	//   // Acquire the mutex
-	//   if (xSemaphoreTake(dataMutex, portMAX_DELAY) == pdTRUE) {
-	//       // Access and modify shared resources (sysState.inputs and currentStepSize)
-
-	//       // Release the mutex
-	//       xSemaphoreGive(dataMutex);
-	//   }
-
-	// // put your main code here, to run repeatedly:
-	// static uint32_t next = millis();
-	// static uint32_t count = 0;
-
-	// while (millis() < next)
-	// 	; // Wait for the next interval
-
-	// next += interval;
-
-	// // Update display
-	// u8g2.clearBuffer();					// clear the internal memory
-	// u8g2.setFont(u8g2_font_ncenB08_tr); // choose a suitable font
-	// u8g2.setCursor(2, 10);
-	// u8g2.print("Inputs: ");
-	// u8g2.print(sysState.inputs.to_ulong(), HEX);
-
-	// u8g2.setCursor(2, 20);
-	// u8g2.print("Keys: ");
-	// u8g2.print(getKeysFromInput(sysState.inputs));
-
-	// u8g2.setCursor(2, 30);
-	// u8g2.print("step: ");
-	// u8g2.print(currentStepSize);
-
-	// u8g2.sendBuffer(); // transfer internal memory to the display
-
-	// // Toggle LED
-	// digitalToggle(LED_BUILTIN);
+	#ifdef TEST_DISPLAY
+		uint32_t startTime = micros();
+		for (int iter = 0; iter < 32; iter++) {
+			displayUpdateTask(NULL);
+		}
+		Serial.print("32 iterations of Display Update takes: ");
+		Serial.print(micros()-startTime);
+		Serial.println(" microseconds");
+		while(1);
+	#endif
+	#ifdef TEST_DECODE
+		delay(1000);
+		uint8_t test_message[8] = {0};
+		test_message[0] = 'P';
+		test_message[1] = 5 ;
+		for (int iter = 0; iter < 32; iter++) {
+			xQueueSend(msgInQ, test_message, portMAX_DELAY);
+		}
+		uint32_t startTime = micros();
+		for (int iter = 0; iter < 32; iter++) {
+			decodeTask(NULL);
+		}
+		Serial.print("32 iterations of Decode takes: ");
+		Serial.print(micros()-startTime);
+		Serial.println(" microseconds");
+		while(1);
+	#endif
 }
