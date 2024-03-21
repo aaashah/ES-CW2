@@ -52,4 +52,12 @@ This system demonstrates integration of hardware components and software functio
 
 ## Inter-task Blocking Dependencies Analysis
 
-It is important to analyse inter-task blocking dependencies in order to identify potential bottlenecks and also to optimise task scheduling. 
+It is important to analyse inter-task blocking dependencies in order to identify potential bottlenecks and also to optimise task scheduling. There are certain scenarios where tasks may become blocked whilst waiting for access to shared resources or preemted higher priority tasks. This is due to the concurrent execution of multiple tasks that all have different priorities and requirements. Such blocking dependencies can lead to delays in critical operations and compromise the system's ability to meet real-time deadlines.
+
+One concern is resource contention, particularly in tasks such as 'scanKeysTask()' and 'displayUpdateTask()', which rely on shared resources such as the sysState structure and mutexes. Without proper synchronisation mechanisms in place, simultaneous access to shared resources by multiple tasks may result in data corruption or race conditions, leading to unpredictable behavior.
+
+Moreover, priority inversion poses a risk to system performance, whereby lower-priority tasks holding essential resources may inadvertently block higher-priority tasks. For instance, if a low-priority task acquires a mutex required by a high-priority task, the high-priority task may be delayed, resulting in priority inversion. Mitigating priority inversion requires the adoption of priority inheritance protocols, ensuring that tasks holding critical resources temporarily inherit the priority of the highest-priority task waiting for access.
+
+Another concern is task preemption, introducing non-deterministic behavior and potential delays in critical task execution. Preemptive scheduling policies tailored to the system's real-time requirements can help mitigate the impact of task preemption on blocking dependencies. By prioritising time-sensitive tasks and minimising preemption-related delays, preemptive scheduling enhances system responsiveness and determinism which mitigaates the risk of blocking-induced performance degradation.
+
+In response to these challenges, it is imperative to optimise task priorities, employ real-time scheduling policies, profile and analyse blocking scenarios, and continuously monitor and tune system parameters. By identifying and addressing inter-task blocking dependencies proactively, the system can achieve enhanced responsiveness, reliability, and real-time performance, ensuring the seamless execution of critical tasks within the embedded environment.
