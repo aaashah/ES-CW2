@@ -17,6 +17,8 @@ struct
 	uint8_t RX_Message[8] = {0};
 	uint32_t adjstepSizes[12] = {0};
 	bool receiver = true;
+	bool west = false;
+	bool east = false;
 } sysState;
 QueueHandle_t msgInQ;
 
@@ -105,7 +107,7 @@ void sampleISR()
 			int32_t Vout = (phaseAcc[i] >> 24) - 128;
 
 			// Adjust the volume for the note
-			Vout = Vout >> (8 - sysState.volume);
+			Vout = Vout >> (8 - 8);
 
 			// Accumulate the output voltage for the mixed output
 			mixedOutput += Vout;
@@ -320,7 +322,7 @@ void scanKeysTask(void *pvParameters)
 		if (xSemaphoreTake(sysState.mutex, portMAX_DELAY) == pdTRUE)
 		{
 			// Key scanning loop
-			for (uint8_t rowIdx = 0; rowIdx < 6; ++rowIdx)
+			for (uint8_t rowIdx = 0; rowIdx < 7; ++rowIdx)
 			{
 				// Set the row select address
 				setRow(rowIdx);
@@ -334,6 +336,31 @@ void scanKeysTask(void *pvParameters)
 				{
 					sysState.inputs[rowIdx * 4 + colIdx] = rowInputs[colIdx];
 				}
+
+				if (rowIdx == 5){
+					if (!rowInputs[3]) 
+					{
+						sysState.west= true;
+
+					}
+				}
+				if (rowIdx == 6)
+				{
+					if (!rowInputs[3]) {
+						sysState.east= true;
+					}
+				}
+
+				if (sysState.west || sysState.east)
+				{
+					sysState.receiver=false;
+				}
+
+				//Serial.println("west: ");
+				//Serial.println(sysState.west);
+				//Serial.println("east: ");
+				//Serial.println(sysState.east);
+
 
 				// Knob 3 decode (LAB 2 task 2)
 				if (rowIdx == 3)
