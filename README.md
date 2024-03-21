@@ -13,26 +13,27 @@ This report provides detailed analysis of the embedded system, which is designed
 # Tasks
 ## scanKeysTask()
 The 'scanKeysTask()' is a crucial component responsible for scanning input keys and updating the state of the system according to detected inputs. It operates as a thread within the FreeRTOS environment which allows it to run concurrently with other tasks. After its initiation, it iterates through each row of the key matrix and reads the state of the columns to determine which keys are pressed. The state of the system is then updated.     
-Theoretical minimum initiation -     
-Measured maximum execution time - 
+Theoretical minimum initiation -  20.8 Microseconds   
+Measured maximum execution time - 107 Microseconds
 
 ## displayUpdateTask()
 This task updates the OLED display with the latest state information of the system including octaves, volume, keys and input hex. It is a thread based task and operates independently within the FreeRTOS schedular. Once executed,  it retrieves relevant system parameters and formats them for display. This task plays a vital role in providing user feedback and ensuring a seamless interaction experience.           
 Method- Thread 
-Theoretical minimum initiation -     
-Measured maximum execution time -  
+Theoretical minimum initiation - 2.78 Microseconds      
+Measured maximum execution time - 17 Microseconds          
 
 ## CAN_RX_ISR()
 This handles the interrupt service routine (IRS) for receiving CAN messages. As an interrupt-based method, it operates asynchronously in response to external events. When a CAN message is received, the ISR processes the message and queues it for further decoding by the system.             
 Method- Interrupt     
-Theoretical minimum initiation -     
+Theoretical minimum initiation - 6.94 Microseconds   
 Measured maximum execution time -    
 
 ## decodeTask()
 This decodes the received CAN messages and updates system variables accordingly. Operating as a thread within the FreeRTOS environment, it continuously monitors the message queue for incoming data. Upon receiving a message, it interprets its content and adjusts system parameters as necessary.          
 Method- Thread     
-Theoretical minimum initiation -     
-Measured maximum execution time -    
+Theoretical minimum initiation - 13.89 Microseconds        
+Measured maximum execution time - 11.7 Microseconds
+   
 
 ## CAN_TX_Task()
 This transmits CAN messages containing state information. Similar to other thread-based tasks, it operates within the FreeRTOS scheduler, periodically sending updates over the CAN bus.             
