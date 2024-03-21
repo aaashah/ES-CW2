@@ -7,12 +7,11 @@
 4. [Analysis](#analysis)
 
 # Introduction
-This report provides detailed analysis of the system and outlines task implementation, performance evaluation, and critical analysis. The system aims to achieve responsive and deterministic behaviour using techniques such as scheduling, interrupt handling, and data synchronisation.
+This report provides detailed analysis of the embedded system, which is designed to manage real-time audio processing and user interaction. It outlines task implementation, performance evaluation, and critically analyses the effectiveness of the system design. The system aims to achieve responsive and deterministic behaviour using techniques such as scheduling, interrupt handling, and data synchronisation.
 
 # Tasks
 ## scanKeysTask()
-This task is responsible for scanning input keys and updating the state of the system according to the result. 
-Method- Thread    
+The 'scanKeysTask()' is a crucial component responsible for scanning input keys and updating the state of the system according to detected inputs. It operates as a thread within the FreeRTOS environment which allows it to run concurrently with other tasks. After its initiation, it iterates through each row of the key matrix and reads the state of the columns to determine which keys are pressed. The state of the system is then updated.     
 Theoretical minimum initiation -     
 Measured maximum execution time - 
 
@@ -50,4 +49,7 @@ The ‘sysState’ structure is used to share system state information. ‘knobR
 # Analysis
 ## Critical Instance Analysis
 This system demonstrates integration of hardware components and software functionalities to achieve real-time audio processing and user interaction. It utilises a STM32 microcontroller platform with FreeRTOS for task scheduling and efficiently manages concurrent tasks such as key scanning, display updating, and CAN message handling. Using interrupt service routines (ISRs) for CAN reception and audio sampling ensures timely response to external events, enhancing system responsiveness. The seamless coordination between tasks is achieved through the use of shared data structures and mutex as it enables inter-task communication and synchronisation. Overall, the system demonstrates embedded system development techniques, including multitasking, interupt handling, and real-time data processing smoothly.
+
 ## Inter-task Blocking Dependencies Analysis
+
+It is important to analyse inter-task blocking dependencies in order to identify potential bottlenecks and also to optimise task scheduling. 
